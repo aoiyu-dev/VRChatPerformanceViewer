@@ -12,6 +12,8 @@
  - Ensure it is enabled and close the window.
  - You should now see the `aoiyu_` tab on the side of the 3D Viewport.
 
+Here is a [video tutorial by Fuujin](https://www.youtube.com/watch?v=F5XKMK9L920).
+
 ## Usage
 
  - Click on an Armature or Mesh, and look at the aoiyu_ tab to get information.
