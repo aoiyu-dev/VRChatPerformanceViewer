@@ -19,7 +19,7 @@
 bl_info = {
     "name": "VRChat Performance Viewer",
     "author": "aoiyu_",
-    "version": (1, 0, 0),
+    "version": (1, 1, 0),
     "blender": (2, 80, 0),
     "location": "View3D > Sidebar > VRChat",
     "description": "Displays VRChat avatar performance stats.",
@@ -94,13 +94,6 @@ class VRCRank(bpy.types.Panel):
     
     def draw(self, context):
         layout = self.layout
-        obj = context.object
-        global custom_icons
-        
-        row = layout.row()
-        if obj is None or obj.type != "MESH" and obj.type != "ARMATURE":
-            row.label(text="Currently Unavailable")
-            return
 
         # Draw the UI with the numbers right aligned
         def draw_labeled_row(layout, label, value, value_type, is_mobile=False, factor=0.4, selected_value=None):
@@ -121,6 +114,66 @@ class VRCRank(bpy.types.Panel):
                 right.label(text=f"{value}/{max_value} ({selected_value})")
             else:
                 right.label(text=f"{value}/{max_value}")
+
+        selected_objects = context.selected_objects
+
+        if len(selected_objects) > 1:
+            current_parent = None
+            sel_tri_count = 0
+            sel_mat_count = 0
+            total_tri_count = 0
+            total_mat_count = 0
+            skinned_mesh = 0
+            basic_mesh = 0
+            bone_count = 0
+
+            for obj in selected_objects:
+                if obj.type != 'MESH':
+                    continue
+                if obj.parent is None or obj.parent.type != 'ARMATURE':
+                    row = layout.row()
+                    row.label(text="The current selection is not supported.")
+                    return
+                if current_parent is None:
+                    current_parent = obj.parent
+                    total_tri_count = sum(
+                        sum(len(p.vertices) - 2 for p in child.data.polygons) for child in obj.parent.children if
+                        child.type == 'MESH')
+                    total_mat_count = sum(
+                        len(child.material_slots) for child in obj.parent.children if child.type == "MESH")
+                    for child in obj.parent.children:
+                        if child.type == "MESH":
+                            if any(mod.type == "ARMATURE" for mod in child.modifiers):
+                                skinned_mesh += 1
+                            else:
+                                basic_mesh += 1
+                if current_parent != obj.parent:
+                    row = layout.row()
+                    row.label(text="Multiple parent selection is not supported.")
+                    return
+                sel_tri_count += sum(len(p.vertices) - 2 for p in obj.data.polygons)
+                sel_mat_count += len(obj.material_slots)
+                bone_count = len(obj.parent.data.bones)
+            if current_parent is None:
+                row = layout.row()
+                row.label(text="The current selection is not supported.")
+                return
+            layout.label(text=f"{current_parent.name} (Multi Select Mode)", icon="OUTLINER_OB_ARMATURE")
+            draw_labeled_row(layout, "Skinned Mesh:", skinned_mesh, ValueType.SKINNED_MESH, False, 0.8)
+            if basic_mesh > 0:
+                draw_labeled_row(layout, "Basic Mesh:", basic_mesh, ValueType.BASIC_MESH, False, 0.8)
+            draw_labeled_row(layout, "Tris:", total_tri_count, ValueType.TRIS, False, 0.3, sel_tri_count)
+            draw_labeled_row(layout, "Materials:", total_mat_count, ValueType.MATERIALS, False, 0.6, sel_mat_count)
+            draw_labeled_row(layout, "Bones:", bone_count, ValueType.BONES, False, 0.5)
+            return
+
+        obj = context.object
+        global custom_icons
+        
+        row = layout.row()
+        if obj is None or obj.type != "MESH" and obj.type != "ARMATURE":
+            row.label(text="Currently Unavailable")
+            return
         
         parent = obj.parent
         if parent is not None and parent.type == "ARMATURE":
@@ -204,13 +257,6 @@ class VRCRankMobile(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        obj = context.object
-        global custom_icons
-
-        row = layout.row()
-        if obj is None or obj.type != "MESH" and obj.type != "ARMATURE":
-            row.label(text="Currently Unavailable")
-            return
 
         # Draw the UI with the numbers right aligned
         def draw_labeled_row(layout, label, value, value_type, is_mobile=False, factor=0.4, selected_value=None):
@@ -231,6 +277,66 @@ class VRCRankMobile(bpy.types.Panel):
                 right.label(text=f"{value}/{max_value} ({selected_value})")
             else:
                 right.label(text=f"{value}/{max_value}")
+
+        selected_objects = context.selected_objects
+
+        if len(selected_objects) > 1:
+            current_parent = None
+            sel_tri_count = 0
+            sel_mat_count = 0
+            total_tri_count = 0
+            total_mat_count = 0
+            skinned_mesh = 0
+            basic_mesh = 0
+            bone_count = 0
+
+            for obj in selected_objects:
+                if obj.type != 'MESH':
+                    continue
+                if obj.parent is None or obj.parent.type != 'ARMATURE':
+                    row = layout.row()
+                    row.label(text="The current selection is not supported.")
+                    return
+                if current_parent is None:
+                    current_parent = obj.parent
+                    total_tri_count = sum(
+                        sum(len(p.vertices) - 2 for p in child.data.polygons) for child in obj.parent.children if
+                        child.type == 'MESH')
+                    total_mat_count = sum(
+                        len(child.material_slots) for child in obj.parent.children if child.type == "MESH")
+                    for child in obj.parent.children:
+                        if child.type == "MESH":
+                            if any(mod.type == "ARMATURE" for mod in child.modifiers):
+                                skinned_mesh += 1
+                            else:
+                                basic_mesh += 1
+                if current_parent != obj.parent:
+                    row = layout.row()
+                    row.label(text="Multiple parent selection is not supported.")
+                    return
+                sel_tri_count += sum(len(p.vertices) - 2 for p in obj.data.polygons)
+                sel_mat_count += len(obj.material_slots)
+                bone_count = len(obj.parent.data.bones)
+            if current_parent is None:
+                row = layout.row()
+                row.label(text="The current selection is not supported.")
+                return
+            layout.label(text=f"{current_parent.name} (Multi Select Mode)", icon="OUTLINER_OB_ARMATURE")
+            draw_labeled_row(layout, "Skinned Mesh:", skinned_mesh, ValueType.SKINNED_MESH, True, 0.8)
+            if basic_mesh > 0:
+                draw_labeled_row(layout, "Basic Mesh:", basic_mesh, ValueType.BASIC_MESH, True, 0.8)
+            draw_labeled_row(layout, "Tris:", total_tri_count, ValueType.TRIS, True, 0.3, sel_tri_count)
+            draw_labeled_row(layout, "Materials:", total_mat_count, ValueType.MATERIALS, True, 0.6, sel_mat_count)
+            draw_labeled_row(layout, "Bones:", bone_count, ValueType.BONES, True, 0.5)
+            return
+
+        obj = context.object
+        global custom_icons
+
+        row = layout.row()
+        if obj is None or obj.type != "MESH" and obj.type != "ARMATURE":
+            row.label(text="The current selection is not supported.")
+            return
 
         parent = obj.parent
         if parent is not None and parent.type == "ARMATURE":
