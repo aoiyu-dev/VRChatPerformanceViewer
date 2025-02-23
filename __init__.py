@@ -83,6 +83,167 @@ class ValueType(Enum):
     MATERIALS = "Materials"
     BONES = "Bones"
 
+class MeasuredStats:
+    total_tri_count = 0
+    total_mat_count = 0
+    bone_count = 0
+    skinned_mesh = 0
+    basic_mesh = 0
+
+class VRCGlobalFunctions:
+
+    # Draw the UI with the numbers right aligned
+    @staticmethod
+    def draw_labeled_row(layout, label, value, value_type, is_mobile=False, factor=0.4, selected_value=None):
+        max_value = ValueProvider.get_value(value_type, value, is_mobile)
+        icon = IconProvider.get_icon(value_type, value, is_mobile)
+
+        row = layout.row(align=True)
+        split = row.split(factor=factor)
+
+        left = split.row(align=True)
+        left.label(text=label, icon_value=icon)
+
+        right = split.row(align=True)
+        right.alignment = 'RIGHT'
+
+        # Display selected values if selected or not
+        if selected_value is not None:
+            right.label(text=f"{value}/{max_value} ({selected_value})")
+        else:
+            right.label(text=f"{value}/{max_value}")
+
+    @staticmethod
+    def walk_children(obj, measured_stats, is_collection):
+        if is_collection:
+            for child in obj.objects:
+                VRCGlobalFunctions.get_stats_for_object(child, measured_stats)
+        else:
+            for element in obj:
+                VRCGlobalFunctions.get_stats_for_object(element, measured_stats)
+                for child in element.children_recursive:
+                    VRCGlobalFunctions.get_stats_for_object(child, measured_stats)
+
+    @staticmethod
+    def get_stats_for_object(obj, measured_stats):
+        if isinstance(obj, bpy.types.Collection):
+            # it's a collection, there are no stats to calculate for collections,
+            # and they don't have the field "type", so exit early
+            return
+        elif obj.type == "MESH":
+            tri_count, mat_count = VRCGlobalFunctions.get_materials_and_tris_from_mesh(obj)
+            measured_stats.total_tri_count += tri_count
+            measured_stats.total_mat_count += mat_count
+            if any(mod.type == "ARMATURE" for mod in obj.modifiers) or \
+        (obj.data.shape_keys is not None and len(obj.data.shape_keys.key_blocks) > 1):
+                measured_stats.skinned_mesh += 1
+            else:
+                measured_stats.basic_mesh += 1
+        elif obj.type == "ARMATURE":
+            measured_stats.bone_count += len(obj.data.bones)
+
+    @staticmethod
+    def get_selected():
+        if len(bpy.context.selected_objects) == 0 and bpy.context.view_layer.active_layer_collection is not None:
+            print("Collection selected.")
+            return bpy.context.view_layer.active_layer_collection.collection, True
+        elif len(bpy.context.selected_objects) > 0:
+            # FIXME: bpy.context.selected_objects doesn't include disabled objects.
+            #  I don't see any easy way to get all the objects, so this will have to do. Current upstream has the same limitation.
+            print("Objects selected.", bpy.context.selected_objects)
+            return bpy.context.selected_objects, False
+        else:
+            print("No object selected.")
+            return None, None
+
+    @staticmethod
+    def get_materials_and_tris_from_mesh(mesh):
+        # Count of tris and mats on the selected mesh
+        tri_count = sum(len(p.vertices) - 2 for p in mesh.data.polygons)
+        mat_count = len(mesh.material_slots)
+
+        return tri_count, mat_count
+
+    @staticmethod
+    def get_icon_and_name_for_selection():
+
+        # Get the currently selected object
+        obj, is_collection = VRCGlobalFunctions.get_selected()
+
+        if obj:
+            # Retrieve the object's name
+            # object_name = obj.name
+
+            # Retrieve the icon corresponding to the object's type
+            # icon = bpy.types.UILayout.bl_rna.functions['prop'].parameters['icon'].enum_items.get(obj.type).icon
+            # icon = bpy.types.UILayout.icon(bpy.context.object)
+            object_name = ""
+            icon = ""
+
+            if is_collection:
+                object_name = obj.name
+                icon = "OUTLINER_COLLECTION"
+            elif len(obj) > 1:
+                object_name = f"Multiple Objects ({len(obj)})"
+                icon = "MOD_ARRAY"
+            elif obj[0].type == "ARMATURE":
+                object_name = obj[0].name
+                icon = "OUTLINER_OB_ARMATURE"
+            elif obj[0].type == "MESH":
+                object_name = obj[0].name
+                icon = "MESH_CUBE"
+            elif obj[0].type == "EMPTY":
+                object_name = obj[0].name
+                icon = "OUTLINER_OB_EMPTY"
+
+            print(f"Object Name: {object_name}")
+            print(f"Object Icon: {icon}")
+            return icon, object_name
+        else:
+            print("No object selected.")
+            return None, None
+
+    @staticmethod
+    def draw_perf_labels(
+            layout,
+            measured_stats: MeasuredStats,
+            is_mobile=False):
+
+        icon, object_name = VRCGlobalFunctions.get_icon_and_name_for_selection()
+        # Drawing UI
+        layout.label(text=f"{object_name}", icon=icon)
+        if measured_stats.skinned_mesh > 0:
+            VRCGlobalFunctions.draw_labeled_row(layout, "Skinned Mesh:", measured_stats.skinned_mesh, ValueType.SKINNED_MESH, is_mobile, 0.8)
+        if measured_stats.basic_mesh > 0:
+            VRCGlobalFunctions.draw_labeled_row(layout, "Basic Mesh:", measured_stats.basic_mesh, ValueType.BASIC_MESH, is_mobile, 0.8)
+        if measured_stats.total_tri_count > 0:
+            VRCGlobalFunctions.draw_labeled_row(layout, "Tris:", measured_stats.total_tri_count, ValueType.TRIS, is_mobile, 0.3, measured_stats.total_tri_count)
+        if measured_stats.total_mat_count > 0:
+            VRCGlobalFunctions.draw_labeled_row(layout, "Materials:", measured_stats.total_mat_count, ValueType.MATERIALS, is_mobile, 0.6, measured_stats.total_mat_count)
+        if measured_stats.bone_count > 0:
+            VRCGlobalFunctions.draw_labeled_row(layout, "Bones:", measured_stats.bone_count, ValueType.BONES, is_mobile, 0.5)
+
+    @staticmethod
+    def determine_draw_path(layout, is_mobile):
+        obj, is_collection = VRCGlobalFunctions.get_selected()
+        global custom_icons
+
+        measured_stats = MeasuredStats()
+
+        if is_collection:
+            VRCGlobalFunctions.walk_children(obj, measured_stats, is_collection)
+            VRCGlobalFunctions.draw_perf_labels(layout, measured_stats, is_mobile)
+            return
+        if len(obj) == 1 and obj[0].parent is not None and obj[0].parent.type == "ARMATURE":
+            VRCGlobalFunctions.walk_children(obj.parent, measured_stats, is_collection)
+            VRCGlobalFunctions.draw_perf_labels(layout, measured_stats, is_mobile)
+            return
+        else:
+            VRCGlobalFunctions.walk_children(obj, measured_stats, is_collection)
+            VRCGlobalFunctions.draw_perf_labels(layout, measured_stats, is_mobile)
+            return
+
+
 class VRCRank(bpy.types.Panel):
     # Panel for PC Rank
 
@@ -90,160 +251,11 @@ class VRCRank(bpy.types.Panel):
     bl_idname = "PT_VRCAR"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "aoiyu_"
+    bl_category = "VRChat"
     
     def draw(self, context):
-        layout = self.layout
-
-        # Draw the UI with the numbers right aligned
-        def draw_labeled_row(layout, label, value, value_type, is_mobile=False, factor=0.4, selected_value=None):
-            max_value = ValueProvider.get_value(value_type, value, is_mobile)
-            icon = IconProvider.get_icon(value_type, value, is_mobile)
-
-            row = layout.row(align=True)
-            split = row.split(factor=factor)
-
-            left = split.row(align=True)
-            left.label(text=label, icon_value=icon)
-
-            right = split.row(align=True)
-            right.alignment = 'RIGHT'
-
-            # Display selected values if selected or not
-            if selected_value is not None:
-                right.label(text=f"{value}/{max_value} ({selected_value})")
-            else:
-                right.label(text=f"{value}/{max_value}")
-
-        selected_objects = context.selected_objects
-
-        if len(selected_objects) > 1:
-            current_parent = None
-            sel_tri_count = 0
-            sel_mat_count = 0
-            total_tri_count = 0
-            total_mat_count = 0
-            skinned_mesh = 0
-            basic_mesh = 0
-            bone_count = 0
-
-            for obj in selected_objects:
-                if obj.type != 'MESH':
-                    continue
-                if obj.parent is None or obj.parent.type != 'ARMATURE':
-                    row = layout.row()
-                    row.label(text="The current selection is not supported.")
-                    return
-                if current_parent is None:
-                    current_parent = obj.parent
-                    total_tri_count = sum(
-                        sum(len(p.vertices) - 2 for p in child.data.polygons) for child in obj.parent.children if
-                        child.type == 'MESH')
-                    total_mat_count = sum(
-                        len(child.material_slots) for child in obj.parent.children if child.type == "MESH")
-                    for child in obj.parent.children:
-                        if child.type == "MESH":
-                            if any(mod.type == "ARMATURE" for mod in child.modifiers):
-                                skinned_mesh += 1
-                            else:
-                                basic_mesh += 1
-                if current_parent != obj.parent:
-                    row = layout.row()
-                    row.label(text="Multiple parent selection is not supported.")
-                    return
-                sel_tri_count += sum(len(p.vertices) - 2 for p in obj.data.polygons)
-                sel_mat_count += len(obj.material_slots)
-                bone_count = len(obj.parent.data.bones)
-            if current_parent is None:
-                row = layout.row()
-                row.label(text="The current selection is not supported.")
-                return
-            layout.label(text=f"{current_parent.name} (Multi Select Mode)", icon="OUTLINER_OB_ARMATURE")
-            draw_labeled_row(layout, "Skinned Mesh:", skinned_mesh, ValueType.SKINNED_MESH, False, 0.8)
-            if basic_mesh > 0:
-                draw_labeled_row(layout, "Basic Mesh:", basic_mesh, ValueType.BASIC_MESH, False, 0.8)
-            draw_labeled_row(layout, "Tris:", total_tri_count, ValueType.TRIS, False, 0.3, sel_tri_count)
-            draw_labeled_row(layout, "Materials:", total_mat_count, ValueType.MATERIALS, False, 0.6, sel_mat_count)
-            draw_labeled_row(layout, "Bones:", bone_count, ValueType.BONES, False, 0.5)
-            return
-
-        obj = context.object
-        global custom_icons
-        
-        row = layout.row()
-        if obj is None or obj.type != "MESH" and obj.type != "ARMATURE":
-            row.label(text="Currently Unavailable")
-            return
-        
-        parent = obj.parent
-        if parent is not None and parent.type == "ARMATURE":
-            # Count of tris and mats on the entire armature
-            total_tri_count = sum(sum(len(p.vertices) - 2 for p in child.data.polygons) for child in parent.children if child.type == 'MESH')
-            total_mat_count = sum(len(child.material_slots) for child in parent.children if child.type == "MESH")
-            
-            # Get the number of bones
-            bone_count = len(parent.data.bones)
-            
-            # Skinned Mesh or Basic Mesh
-            skinned_mesh = 0
-            basic_mesh = 0
-            for child in parent.children:
-                if child.type == "MESH":
-                    if any(mod.type == "ARMATURE" for mod in child.modifiers):
-                        skinned_mesh += 1
-                    else:
-                        basic_mesh += 1
-            
-            # Count of tris and mats on the selected mesh
-            tri_count = sum(len(p.vertices) - 2 for p in obj.data.polygons)
-            mat_count = len(obj.material_slots)
-            
-            # Drawing UI
-            layout.label(text=f"{parent.name}", icon="OUTLINER_OB_ARMATURE")
-            draw_labeled_row(layout, "Skinned Mesh:", skinned_mesh, ValueType.SKINNED_MESH, False, 0.8)
-            if basic_mesh > 0:
-                draw_labeled_row(layout, "Basic Mesh:", basic_mesh, ValueType.BASIC_MESH, False, 0.8)
-            draw_labeled_row(layout, "Tris:", total_tri_count, ValueType.TRIS, False, 0.3, tri_count)
-            draw_labeled_row(layout, "Materials:", total_mat_count, ValueType.MATERIALS, False, 0.6, mat_count)
-            draw_labeled_row(layout, "Bones:", bone_count, ValueType.BONES, False, 0.5)
-            return
-        elif obj.type == "ARMATURE":
-            # Count of tris and mats on the entire armature
-            total_tri_count = sum(sum(len(p.vertices) - 2 for p in child.data.polygons) for child in obj.children if child.type == 'MESH')
-            total_mat_count = sum(len(child.material_slots) for child in obj.children if child.type == "MESH")
-            
-            # Get the number of bones
-            bone_count = len(obj.data.bones)
-            
-            # Skinned Mesh or Basic Mesh
-            skinned_mesh = 0
-            basic_mesh = 0
-            for child in obj.children:
-                if child.type == "MESH":
-                    if any(mod.type == "ARMATURE" for mod in child.modifiers):
-                        skinned_mesh += 1
-                    else:
-                        basic_mesh += 1
-            
-            # Drawing UI
-            layout.label(text=f"{obj.name}", icon="OUTLINER_OB_ARMATURE")
-            draw_labeled_row(layout, "Skinned Mesh:", skinned_mesh, ValueType.SKINNED_MESH, False, 0.8)
-            if basic_mesh > 0:
-                draw_labeled_row(layout, "Basic Mesh:", basic_mesh, ValueType.BASIC_MESH, False, 0.8)
-            draw_labeled_row(layout, "Tris:", total_tri_count, ValueType.TRIS, False)
-            draw_labeled_row(layout, "Materials:", total_mat_count, ValueType.MATERIALS, False, 0.6)
-            draw_labeled_row(layout, "Bones:", bone_count, ValueType.BONES, False, 0.5)
-            return
-        else:
-            # Count of tris and mats
-            tri_count = sum(len(p.vertices) - 2 for p in obj.data.polygons)
-            mat_count = len(obj.material_slots)
-            
-            # Drawing UI
-            layout.label(text=f"{obj.name}", icon="MESH_CUBE")
-            draw_labeled_row(layout, "Tris:", tri_count, ValueType.TRIS, False)
-            draw_labeled_row(layout, "Materials:", mat_count, ValueType.MATERIALS, False, 0.6)
-            return
+        VRCGlobalFunctions.determine_draw_path(self.layout, False)
+        return
 
 
 class VRCRankMobile(bpy.types.Panel):
@@ -253,162 +265,11 @@ class VRCRankMobile(bpy.types.Panel):
     bl_idname = "PT_VRCARQ"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "aoiyu_"
+    bl_category = "VRChat"
 
     def draw(self, context):
-        layout = self.layout
-
-        # Draw the UI with the numbers right aligned
-        def draw_labeled_row(layout, label, value, value_type, is_mobile=False, factor=0.4, selected_value=None):
-            max_value = ValueProvider.get_value(value_type, value, is_mobile)
-            icon = IconProvider.get_icon(value_type, value, is_mobile)
-
-            row = layout.row(align=True)
-            split = row.split(factor=factor)
-
-            left = split.row(align=True)
-            left.label(text=label, icon_value=icon)
-
-            right = split.row(align=True)
-            right.alignment = 'RIGHT'
-
-            # Display selected values if selected or not
-            if selected_value is not None:
-                right.label(text=f"{value}/{max_value} ({selected_value})")
-            else:
-                right.label(text=f"{value}/{max_value}")
-
-        selected_objects = context.selected_objects
-
-        if len(selected_objects) > 1:
-            current_parent = None
-            sel_tri_count = 0
-            sel_mat_count = 0
-            total_tri_count = 0
-            total_mat_count = 0
-            skinned_mesh = 0
-            basic_mesh = 0
-            bone_count = 0
-
-            for obj in selected_objects:
-                if obj.type != 'MESH':
-                    continue
-                if obj.parent is None or obj.parent.type != 'ARMATURE':
-                    row = layout.row()
-                    row.label(text="The current selection is not supported.")
-                    return
-                if current_parent is None:
-                    current_parent = obj.parent
-                    total_tri_count = sum(
-                        sum(len(p.vertices) - 2 for p in child.data.polygons) for child in obj.parent.children if
-                        child.type == 'MESH')
-                    total_mat_count = sum(
-                        len(child.material_slots) for child in obj.parent.children if child.type == "MESH")
-                    for child in obj.parent.children:
-                        if child.type == "MESH":
-                            if any(mod.type == "ARMATURE" for mod in child.modifiers):
-                                skinned_mesh += 1
-                            else:
-                                basic_mesh += 1
-                if current_parent != obj.parent:
-                    row = layout.row()
-                    row.label(text="Multiple parent selection is not supported.")
-                    return
-                sel_tri_count += sum(len(p.vertices) - 2 for p in obj.data.polygons)
-                sel_mat_count += len(obj.material_slots)
-                bone_count = len(obj.parent.data.bones)
-            if current_parent is None:
-                row = layout.row()
-                row.label(text="The current selection is not supported.")
-                return
-            layout.label(text=f"{current_parent.name} (Multi Select Mode)", icon="OUTLINER_OB_ARMATURE")
-            draw_labeled_row(layout, "Skinned Mesh:", skinned_mesh, ValueType.SKINNED_MESH, True, 0.8)
-            if basic_mesh > 0:
-                draw_labeled_row(layout, "Basic Mesh:", basic_mesh, ValueType.BASIC_MESH, True, 0.8)
-            draw_labeled_row(layout, "Tris:", total_tri_count, ValueType.TRIS, True, 0.3, sel_tri_count)
-            draw_labeled_row(layout, "Materials:", total_mat_count, ValueType.MATERIALS, True, 0.6, sel_mat_count)
-            draw_labeled_row(layout, "Bones:", bone_count, ValueType.BONES, True, 0.5)
-            return
-
-        obj = context.object
-        global custom_icons
-
-        row = layout.row()
-        if obj is None or obj.type != "MESH" and obj.type != "ARMATURE":
-            row.label(text="The current selection is not supported.")
-            return
-
-        parent = obj.parent
-        if parent is not None and parent.type == "ARMATURE":
-            # Count of tris and mats on the entire armature
-            total_tri_count = sum(sum(len(p.vertices) - 2 for p in child.data.polygons) for child in parent.children if
-                                  child.type == 'MESH')
-            total_mat_count = sum(len(child.material_slots) for child in parent.children if child.type == "MESH")
-
-            # Get the number of bones
-            bone_count = len(parent.data.bones)
-
-            # Skinned Mesh or Basic Mesh
-            skinned_mesh = 0
-            basic_mesh = 0
-            for child in parent.children:
-                if child.type == "MESH":
-                    if any(mod.type == "ARMATURE" for mod in child.modifiers):
-                        skinned_mesh += 1
-                    else:
-                        basic_mesh += 1
-
-            # Count of tris and mats on the selected mesh
-            tri_count = sum(len(p.vertices) - 2 for p in obj.data.polygons)
-            mat_count = len(obj.material_slots)
-
-            # Drawing UI
-            layout.label(text=f"{parent.name}", icon="OUTLINER_OB_ARMATURE")
-            draw_labeled_row(layout, "Skinned Mesh:", skinned_mesh, ValueType.SKINNED_MESH, True, 0.8)
-            if basic_mesh > 0:
-                draw_labeled_row(layout, "Basic Mesh:", basic_mesh, ValueType.BASIC_MESH, True, 0.8)
-            draw_labeled_row(layout, "Tris:", total_tri_count, ValueType.TRIS, True, 0.3, tri_count)
-            draw_labeled_row(layout, "Materials:", total_mat_count, ValueType.MATERIALS, True, 0.6, mat_count)
-            draw_labeled_row(layout, "Bones:", bone_count, ValueType.BONES, True, 0.5)
-            return
-        elif obj.type == "ARMATURE":
-            # Count of tris and mats on the entire armature
-            total_tri_count = sum(
-                sum(len(p.vertices) - 2 for p in child.data.polygons) for child in obj.children if child.type == 'MESH')
-            total_mat_count = sum(len(child.material_slots) for child in obj.children if child.type == "MESH")
-
-            # Get the number of bones
-            bone_count = len(obj.data.bones)
-
-            # Skinned Mesh or Basic Mesh
-            skinned_mesh = 0
-            basic_mesh = 0
-            for child in obj.children:
-                if child.type == "MESH":
-                    if any(mod.type == "ARMATURE" for mod in child.modifiers):
-                        skinned_mesh += 1
-                    else:
-                        basic_mesh += 1
-
-            # Drawing UI
-            layout.label(text=f"{obj.name}", icon="OUTLINER_OB_ARMATURE")
-            draw_labeled_row(layout, "Skinned Mesh:", skinned_mesh, ValueType.SKINNED_MESH, True, 0.8)
-            if basic_mesh > 0:
-                draw_labeled_row(layout, "Basic Mesh:", basic_mesh, ValueType.BASIC_MESH, True, 0.8)
-            draw_labeled_row(layout, "Tris:", total_tri_count, ValueType.TRIS, True)
-            draw_labeled_row(layout, "Materials:", total_mat_count, ValueType.MATERIALS, True, 0.6)
-            draw_labeled_row(layout, "Bones:", bone_count, ValueType.BONES, True, 0.5)
-            return
-        else:
-            # Count of tris and mats
-            tri_count = sum(len(p.vertices) - 2 for p in obj.data.polygons)
-            mat_count = len(obj.material_slots)
-
-            # Drawing UI
-            layout.label(text=f"{obj.name}", icon="MESH_CUBE")
-            draw_labeled_row(layout, "Tris:", tri_count, ValueType.TRIS, False)
-            draw_labeled_row(layout, "Materials:", mat_count, ValueType.MATERIALS, False, 0.6)
-            return
+        VRCGlobalFunctions.determine_draw_path(self.layout, True)
+        return
 
 class IconProvider:
     # Handles icon selection based on ValueType.
