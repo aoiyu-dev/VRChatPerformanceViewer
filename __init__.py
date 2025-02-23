@@ -19,7 +19,7 @@
 bl_info = {
     "name": "VRChat Performance Viewer",
     "author": "aoiyu_",
-    "version": (1, 0, 0),
+    "version": (1, 1, 0),
     "blender": (2, 80, 0),
     "location": "View3D > Sidebar > VRChat",
     "description": "Displays VRChat avatar performance stats.",
