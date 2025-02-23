@@ -184,7 +184,7 @@ class VRCGlobalFunctions:
                 object_name = obj.name
                 icon = "OUTLINER_COLLECTION"
             elif len(obj) > 1:
-                object_name = "Multiple Objects ({})".format(len(obj))
+                object_name = f"Multiple Objects ({len(obj)})"
                 icon = "MOD_ARRAY"
             elif obj[0].type == "ARMATURE":
                 object_name = obj[0].name
