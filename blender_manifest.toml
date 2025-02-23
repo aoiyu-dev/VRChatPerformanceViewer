@@ -3,7 +3,7 @@ schema_version = "1.0.0"
 # Example of manifest file for a Blender extension
 # Change the values according to your extension
 id = "aoiyu_vrchat_performance_viewer"
-version = "1.0.0"
+version = "1.1.0"
 name = "VRChat Performance Viewer"
 tagline = "Displays VRChat avatar performance stats"
 maintainer = "aoiyu_"
@@ -11,10 +11,10 @@ maintainer = "aoiyu_"
 type = "add-on"
 
 location = "View3D > Sidebar > VRChat"
-description = "Cleans up the actively selected mesh by removing all 0-weight vertices from all vertex groups."
+description = "A quick way to see where your avatar ranks, directly in the 3D view!"
 
 # Optional link to documentation, support, source files, etc
-website = "https://github.com/TayouVR/Blender_merge-bones"
+website = "https://github.com/aoiyu-dev/VRChatPerformanceViewer"
 
 # Optional list defined by Blender and server, see:
 # https://docs.blender.org/manual/en/dev/advanced/extensions/tags.html
