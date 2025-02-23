@@ -148,6 +148,8 @@ class VRCGlobalFunctions:
             print("Collection selected.")
             return bpy.context.view_layer.active_layer_collection.collection, True
         elif len(bpy.context.selected_objects) > 0:
+            # FIXME: bpy.context.selected_objects doesn't include disabled objects.
+            #  I don't see any easy way to get all the objects, so this will have to do. Current upstream has the same limitation.
             print("Objects selected.", bpy.context.selected_objects)
             return bpy.context.selected_objects, False
         else:
@@ -182,7 +184,7 @@ class VRCGlobalFunctions:
                 object_name = obj.name
                 icon = "OUTLINER_COLLECTION"
             elif len(obj) > 1:
-                object_name = "Multiple Objects"
+                object_name = "Multiple Objects ({})".format(len(obj))
                 icon = "MOD_ARRAY"
             elif obj[0].type == "ARMATURE":
                 object_name = obj[0].name
