@@ -115,13 +115,14 @@ class VRCGlobalFunctions:
 
     @staticmethod
     def walk_children(obj, measured_stats, is_collection):
-        VRCGlobalFunctions.get_stats_for_object(obj, measured_stats)
         if is_collection:
             for child in obj.objects:
                 VRCGlobalFunctions.get_stats_for_object(child, measured_stats)
         else:
-            for child in obj.children_recursive:
-                VRCGlobalFunctions.get_stats_for_object(child, measured_stats)
+            for element in obj:
+                VRCGlobalFunctions.get_stats_for_object(element, measured_stats)
+                for child in element.children_recursive:
+                    VRCGlobalFunctions.get_stats_for_object(child, measured_stats)
 
     @staticmethod
     def get_stats_for_object(obj, measured_stats):
@@ -147,8 +148,8 @@ class VRCGlobalFunctions:
             print("Collection selected.")
             return bpy.context.view_layer.active_layer_collection.collection, True
         elif len(bpy.context.selected_objects) > 0:
-            print("Object selected.", bpy.context.object)
-            return bpy.context.object, False
+            print("Objects selected.", bpy.context.selected_objects)
+            return bpy.context.selected_objects, False
         else:
             print("No object selected.")
             return None, None
@@ -180,14 +181,17 @@ class VRCGlobalFunctions:
             if is_collection:
                 object_name = obj.name
                 icon = "OUTLINER_COLLECTION"
-            elif obj.type == "ARMATURE":
-                object_name = obj.name
+            elif len(obj) > 1:
+                object_name = "Multiple Objects"
+                icon = "MOD_ARRAY"
+            elif obj[0].type == "ARMATURE":
+                object_name = obj[0].name
                 icon = "OUTLINER_OB_ARMATURE"
-            elif obj.type == "MESH":
-                object_name = obj.name
+            elif obj[0].type == "MESH":
+                object_name = obj[0].name
                 icon = "MESH_CUBE"
-            elif obj.type == "EMPTY":
-                object_name = obj.name
+            elif obj[0].type == "EMPTY":
+                object_name = obj[0].name
                 icon = "OUTLINER_OB_EMPTY"
 
             print(f"Object Name: {object_name}")
@@ -228,7 +232,7 @@ class VRCGlobalFunctions:
             VRCGlobalFunctions.walk_children(obj, measured_stats, is_collection)
             VRCGlobalFunctions.draw_perf_labels(layout, measured_stats, is_mobile)
             return
-        if obj.parent is not None and obj.parent.type == "ARMATURE":
+        if len(obj) == 1 and obj[0].parent is not None and obj[0].parent.type == "ARMATURE":
             VRCGlobalFunctions.walk_children(obj.parent, measured_stats, is_collection)
             VRCGlobalFunctions.draw_perf_labels(layout, measured_stats, is_mobile)
             return
